@@ -7,6 +7,7 @@ import OrderPage from '../pages/OrderPage';
 import AdminDashboard from '../pages/admin/Dashboard';
 import StoreDashboard from '../pages/store/Dashboard';
 import ProtectedRoute from '../components/ProtectedRoute';
+import CustomerMenuPage from '../pages/CustomerMenuPage';
 
 
 
@@ -16,6 +17,7 @@ const AppRouter: React.FC = () => {
       {/* 공개 라우트 */}
       <Route path="/login" element={<LoginPage />} />
       <Route path="/" element={<QRScanPage />} />
+      <Route path="/store/menu/:storeId" element={<CustomerMenuPage />} />
       
       
 
