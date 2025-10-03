@@ -1,0 +1,136 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model admins {
+  id         Int        @id @default(autoincrement())
+  email      String     @unique @db.VarChar(100)
+  password   String     @db.VarChar(255)
+  name       String     @db.VarChar(50)
+  role       admin_role
+  created_at DateTime   @default(now())
+  updated_at DateTime   @default(now()) @updatedAt
+  stores     stores[]
+}
+
+model stores {
+  id              Int               @id @default(autoincrement())
+  name            String            @db.VarChar(100)
+  address         String            @db.VarChar(200)
+  phone           String            @db.VarChar(20)
+  admin_id        Int
+  created_at      DateTime          @default(now())
+  updated_at      DateTime          @default(now()) @updatedAt
+  menu_categories menu_categories[]
+  menu_items      menu_items[]
+  orders          orders[]
+  qr_codes        qr_codes[]
+  admin           admins            @relation(fields: [admin_id], references: [id], onDelete: Cascade)
+
+  @@index([admin_id])
+}
+
+model menu_categories {
+  id            Int          @id @default(autoincrement())
+  store_id      Int
+  name          String       @db.VarChar(50)
+  display_order Int          @default(0)
+  created_at    DateTime     @default(now())
+  updated_at    DateTime     @default(now()) @updatedAt
+  store         stores       @relation(fields: [store_id], references: [id], onDelete: Cascade)
+  item_links    menu_item_categories[]
+
+  @@index([store_id])
+}
+
+model menu_items {
+  id           Int             @id @default(autoincrement())
+  store_id     Int
+  category_id  Int
+  name         String          @db.VarChar(100)
+  description  String?         @db.Text
+  price        Decimal         @db.Decimal(10, 2)
+  image_url    String?         @db.VarChar(255)
+  is_available Boolean         @default(true)
+  global_order Int             @default(0)
+  created_at   DateTime        @default(now())
+  updated_at   DateTime        @default(now()) @updatedAt
+  store        stores          @relation(fields: [store_id], references: [id], onDelete: Cascade)
+  order_items  order_items[]
+  category_links menu_item_categories[]
+
+  @@index([category_id])
+  @@index([store_id])
+}
+
+model menu_item_categories {
+  id          Int            @id @default(autoincrement())
+  item_id     Int
+  category_id Int
+  item_order  Int            @default(0)  // 해당 카테고리 내 정렬
+
+  item     menu_items      @relation(fields: [item_id], references: [id], onDelete: Cascade)
+  category menu_categories @relation(fields: [category_id], references: [id], onDelete: Cascade)
+
+  @@unique([item_id, category_id])   // 같은 조합 중복 방지
+  @@index([category_id, item_order]) // 카테고리 내 정렬 조회 최적화
+  @@index([item_id])
+}
+
+model orders {
+  id           Int           @id @default(autoincrement())
+  store_id     Int
+  table_number Int
+  total_amount Decimal       @db.Decimal(10, 2)
+  status       order_status  @default(pending)
+  created_at   DateTime      @default(now())
+  updated_at   DateTime      @default(now()) @updatedAt
+  order_items  order_items[]
+  store        stores        @relation(fields: [store_id], references: [id], onDelete: Cascade)
+
+  @@index([store_id])
+}
+
+model order_items {
+  id            Int        @id @default(autoincrement())
+  order_id      Int
+  menu_item_id  Int
+  quantity      Int
+  price_at_time Decimal    @db.Decimal(10, 2)
+  created_at    DateTime   @default(now())
+  menu_item     menu_items @relation(fields: [menu_item_id], references: [id], onDelete: Cascade)
+  order         orders     @relation(fields: [order_id], references: [id], onDelete: Cascade)
+
+  @@index([menu_item_id])
+  @@index([order_id])
+}
+
+model qr_codes {
+  id           Int      @id @default(autoincrement())
+  store_id     Int
+  table_number Int
+  image_url    String   @unique
+  qr_link      String
+  created_at   DateTime @default(now())
+  updated_at   DateTime @default(now()) @updatedAt
+  store        stores   @relation(fields: [store_id], references: [id], onDelete: Cascade)
+
+  @@index([store_id])
+}
+
+enum admin_role {
+  admin
+  store_owner
+}
+
+enum order_status {
+  pending
+  confirmed
+  completed
+  cancelled
+}

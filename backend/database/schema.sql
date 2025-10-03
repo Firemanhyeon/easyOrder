@@ -1,0 +1,78 @@
+-- 데이터베이스 생성
+CREATE DATABASE IF NOT EXISTS easy_order;
+USE easy_order;
+
+-- 가게 테이블
+CREATE TABLE stores (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    name VARCHAR(100) NOT NULL,
+    address VARCHAR(200) NOT NULL,
+    phone VARCHAR(20) NOT NULL,
+    qr_code VARCHAR(100) UNIQUE NOT NULL,
+    admin_id INT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (admin_id) REFERENCES admins(id) ON DELETE CASCADE
+);
+
+-- 관리자 계정 테이블
+CREATE TABLE admins (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    email VARCHAR(100) UNIQUE NOT NULL,
+    password VARCHAR(255) NOT NULL,
+    name VARCHAR(50) NOT NULL,
+    role ENUM('ADMIN', 'STORE_OWNER') NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+-- 메뉴 카테고리 테이블
+CREATE TABLE menu_categories (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    store_id INT NOT NULL,
+    name VARCHAR(50) NOT NULL,
+    display_order INT NOT NULL DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (store_id) REFERENCES stores(id) ON DELETE CASCADE
+);
+
+-- 메뉴 아이템 테이블
+CREATE TABLE menu_items (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    store_id INT NOT NULL,
+    category_id INT NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    description TEXT,
+    price DECIMAL(10,2) NOT NULL,
+    image_url VARCHAR(255),
+    is_available BOOLEAN DEFAULT true,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (store_id) REFERENCES stores(id) ON DELETE CASCADE,
+    FOREIGN KEY (category_id) REFERENCES menu_categories(id) ON DELETE CASCADE
+);
+
+-- 주문 테이블
+CREATE TABLE orders (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    store_id INT NOT NULL,
+    table_number INT NOT NULL,
+    total_amount DECIMAL(10,2) NOT NULL,
+    status ENUM('pending', 'confirmed', 'completed', 'cancelled') DEFAULT 'pending',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (store_id) REFERENCES stores(id) ON DELETE CASCADE
+);
+
+-- 주문 상세 테이블
+CREATE TABLE order_items (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    order_id INT NOT NULL,
+    menu_item_id INT NOT NULL,
+    quantity INT NOT NULL,
+    price_at_time DECIMAL(10,2) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE,
+    FOREIGN KEY (menu_item_id) REFERENCES menu_items(id) ON DELETE CASCADE
+); 
