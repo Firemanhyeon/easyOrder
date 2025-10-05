@@ -64,4 +64,10 @@ export const menuApi = {
     const { data: res } = await api.post(`/menu/category`, data);
     return res;
   },
+
+  // 주문 생성
+  createOrder: async (storeId: number, tableNumber: string, items: { id: number; qty: number }[], total: number) => {
+    const { data } = await api.post(`/order`, { storeId, tableNumber, items, total });
+    return data;
+  },
 };

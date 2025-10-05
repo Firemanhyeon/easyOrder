@@ -14,6 +14,7 @@ import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 
 import { menuApi } from '../api/menu';
 import type { MenuItem as MenuItemType, MenuCategory } from '../types/menu';
+import { table } from 'console';
 
 type CatKey = 'all' | number;
 
@@ -132,15 +133,24 @@ const CustomerMenuPage: React.FC = () => {
   const cartCount = cartLines.reduce((s, l) => s + l.qty, 0);
   const cartTotal = cartLines.reduce((s, l) => s + l.qty * l.price, 0);
 
-  const handleOrder = () => {
-    // TODO: 주문 API 연동 예정
-    console.log('ORDER DRAFT', {
+  const handleOrder = async () => {
+    
+    const tableOrder = {
       storeId,
       tableNumber,
       items: cartLines.map(l => ({ id: l.id, qty: l.qty })),
       total: cartTotal,
-    });
-    alert('주문 기능은 추후 연결됩니다.');
+    };
+    console.log('주문 데이터:', tableOrder);
+    const result = await menuApi.createOrder(storeId, tableNumber, cartLines.map(l => ({ id: l.id, qty: l.qty })) , cartTotal);
+
+    if(result) {
+      alert('주문이 완료되었습니다.');
+      setCart({});
+      setCartOpen(false);
+    } else {
+      alert('주문에 실패했습니다. 다시 시도해주세요.');
+    }
   };
 
   const safeBottom = 'max(env(safe-area-inset-bottom), 12px)';
