@@ -1,9 +1,9 @@
-import React from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   AppBar, Toolbar, IconButton, Typography, Box, Chip, CircularProgress,
   Alert, Container, Card, CardMedia, CardContent, CardActions, Button,
   Drawer, List, ListItem, ListItemText, ListItemSecondaryAction, Icon, Divider,
-  Badge
+  Badge, Dialog, DialogContent, DialogTitle
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import ShoppingBagIcon from '@mui/icons-material/ShoppingBag';
@@ -14,7 +14,8 @@ import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 
 import { menuApi } from '../api/menu';
 import type { MenuItem as MenuItemType, MenuCategory } from '../types/menu';
-import { table } from 'console';
+import { v4 as uuidv4 } from 'uuid';
+import { loadTossPayments } from '@tosspayments/tosspayments-sdk';
 
 type CatKey = 'all' | number;
 
@@ -42,8 +43,15 @@ const CustomerMenuPage: React.FC = () => {
 
   // 장바구니
   const [cartOpen, setCartOpen] = React.useState(false);
+  
   const [cart, setCart] = React.useState<Record<number, CartLine>>({}); // item.id -> line
 
+  // 결제 다이얼로그 상태
+  const [paymentOpen, setPaymentOpen] = React.useState(false);
+  const [paymentLoading, setPaymentLoading] = React.useState(false);
+  const paymentWidgetRef = useRef<any>(null);
+
+  const clientKey = process.env.REACT_APP_TOSS_CLIENT_KEY!;
   // 페이지 진입 로딩
   const fetchInitial = async () => {
     try {
@@ -133,6 +141,126 @@ const CustomerMenuPage: React.FC = () => {
   const cartCount = cartLines.reduce((s, l) => s + l.qty, 0);
   const cartTotal = cartLines.reduce((s, l) => s + l.qty * l.price, 0);
 
+  useEffect(() => {
+    if (paymentOpen && !paymentWidgetRef.current) {
+      handlePayment();
+    }
+  }, [paymentOpen]);
+  
+  // handleCheckout은 단순히 다이얼로그만 열도록 수정
+  const handleCheckout = async () => {
+    if (cartCount === 0) return;
+    setPaymentOpen(true);
+  }
+  // 결제 실행
+  const handlePayment = async () => {
+    try {
+      setPaymentOpen(true); // 다이얼로그 열기
+      setPaymentLoading(true);
+
+      // DOM 렌더링 완료를 기다림
+      await new Promise(resolve => setTimeout(resolve, 300));
+      // DOM 요소가 존재하는지 확인
+      const paymentMethodsElement = document.getElementById('payment-methods');
+      const agreementElement = document.getElementById('agreement');
+      
+      if (!paymentMethodsElement || !agreementElement) {
+        console.error('결제 UI 요소를 찾을 수 없습니다.');
+        return;
+      }
+
+
+
+      const customerKey = 'ANONYMOUS';
+      const tosspayments = await loadTossPayments(clientKey);
+      const widgets = tosspayments.widgets({
+        customerKey,
+        brandpay: {
+          redirectUrl: 'https://tosspayments.com/auth',
+        }
+      });
+
+      await widgets.setAmount({
+        currency: 'KRW',
+        value: cartTotal
+      });
+      // 결제 UI 렌더링
+      const paymentMethodWidget = await widgets.renderPaymentMethods({
+        selector: '#payment-methods',
+        variantKey: "DEFAULT",
+      });
+        // 약관 UI 렌더링
+      const agreementWidget = await widgets.renderAgreement({
+        selector: '#agreement',
+      });
+
+      paymentWidgetRef.current = { widgets, paymentMethodWidget, agreementWidget };
+      setPaymentLoading(false);
+      console.log('토스페이먼츠 v2 결제 요청 완료');
+      
+    } catch (error) {
+      console.error('결제 요청 실패:', error);
+      setError('결제 요청에 실패했습니다.');
+    }
+  }
+  
+
+  const handleClosePayment = async () => {
+    if (paymentWidgetRef.current) {
+      const { paymentMethodWidget, agreementWidget } = paymentWidgetRef.current;
+      
+      // 위젯 destroy 호출
+      try {
+        if (paymentMethodWidget) {
+          await paymentMethodWidget.destroy();
+        }
+        if (agreementWidget) {
+          await agreementWidget.destroy();
+        }
+      } catch (error) {
+        console.log('위젯 정리 중 오류:', error);
+      }
+      
+      // DOM 요소 내용 비우기
+      const paymentMethodsElement = document.getElementById('payment-methods');
+      const agreementElement = document.getElementById('agreement');
+      
+      if (paymentMethodsElement) {
+        paymentMethodsElement.innerHTML = '';
+      }
+      if (agreementElement) {
+        agreementElement.innerHTML = '';
+      }
+      
+      paymentWidgetRef.current = null;
+    }
+    
+    setPaymentOpen(false);
+    setPaymentLoading(false);
+  }
+    // 실제 결제 요청
+  const handleRequestPayment = async () => {
+    if (!paymentWidgetRef.current) return;
+    
+    try {
+      const { widgets } = paymentWidgetRef.current;
+      
+      await widgets.requestPayment({
+        orderId: uuidv4(),
+        orderName: `${cartLines[0]?.name} 외 ${cartLines.length - 1}건`,
+        successUrl: window.location.origin + "/success",
+        failUrl: window.location.origin + "/fail",
+        customerEmail: "customer123@gmail.com",
+        customerName: "김토스",
+      });
+      
+    } catch (error) {
+      console.error('결제 요청 실패:', error);
+      setError('결제 요청에 실패했습니다.');
+    }
+  }
+
+  //주문
   const handleOrder = async () => {
     
     const tableOrder = {
@@ -281,7 +409,7 @@ const CustomerMenuPage: React.FC = () => {
             fullWidth
             variant="contained"
             disabled={cartCount === 0}
-            onClick={handleOrder}
+            onClick={handleCheckout}
           >
             {cartCount === 0 ? '주문하기' : `${currency(cartTotal)} 주문`}
           </Button>
@@ -326,7 +454,7 @@ const CustomerMenuPage: React.FC = () => {
                 <Typography variant="h6">{currency(cartTotal)}</Typography>
               </Box>
               <Box sx={{ p: 2, pt: 0, pb: 'max(env(safe-area-inset-bottom), 12px)' }}>
-                <Button fullWidth variant="contained" size="large" onClick={handleOrder}>
+                <Button fullWidth variant="contained" size="large" onClick={handleCheckout}>
                   결제/주문하기
                 </Button>
               </Box>
@@ -334,6 +462,67 @@ const CustomerMenuPage: React.FC = () => {
           )}
         </Box>
       </Drawer>
+
+      {/* 결제 모달 */}
+      <Dialog 
+        open={paymentOpen} 
+        onClose={handleClosePayment}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: { minHeight: '50vh' }
+        }}
+      >
+        <DialogTitle>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Typography variant="h6">결제하기</Typography>
+            <Typography variant="body2" color="text.secondary">
+              테이블 #{tableNumber}
+            </Typography>
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          <Box>
+            {/* 주문 요약 */}
+            <Box sx={{ mb: 3, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
+              <Typography variant="subtitle1" sx={{ mb: 1 }}>주문 내역</Typography>
+              {cartLines.map(line => (
+                <Box key={line.id} sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                  <Typography variant="body2">{line.name} x{line.qty}</Typography>
+                  <Typography variant="body2">{currency(line.price * line.qty)}</Typography>
+                </Box>
+              ))}
+              <Divider sx={{ my: 1 }} />
+              <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                <Typography variant="subtitle1">총 결제금액</Typography>
+                <Typography variant="h6" color="primary">{currency(cartTotal)}</Typography>
+              </Box>
+            </Box>
+            <div id="payment-methods" style={{ marginBottom: '16px' }}></div>
+            <div id="agreement" style={{ marginBottom: '16px' }}></div>
+            {/* 결제 버튼 */}
+            <Box sx={{ display: 'flex', gap: 2 }}>
+              <Button
+                fullWidth
+                variant="outlined"
+                onClick={() => setPaymentOpen(false)}
+              >
+                취소
+              </Button>
+              <Button
+                fullWidth
+                variant="contained"
+                size="large"
+                onClick={paymentWidgetRef.current ? handleRequestPayment : handlePayment}
+                disabled={paymentLoading}
+              >
+                {paymentLoading ? '로딩중...' : `${currency(cartTotal)} 결제하기`}
+              </Button>
+            </Box>
+          </Box>
+        </DialogContent>
+      </Dialog>
+            
     </Box>
   );
 };
