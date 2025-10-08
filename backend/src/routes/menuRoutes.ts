@@ -23,6 +23,7 @@ router.get('/:storeId/items', menuController.getMenuByStoreId);
 router.get('/:storeId/category/:categoryId', menuController.getMenuByCategory);
 
 
+
 // 인증 필요
 
 router.use(authMiddleware);
@@ -55,4 +56,6 @@ router.post('/category',
     ownStoreGuard,
     menuController.createCategory
 );
+
+
 export default router;

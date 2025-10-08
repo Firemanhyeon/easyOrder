@@ -76,4 +76,10 @@ export const menuApi = {
     const { data } = await api.post(`/payment/confirm`, { paymentKey, orderId, amount });
     return data;
   },
+
+  //결제전 데이터체크
+  prepareCheckout: async (storeId: number , tableNumber: String , items: {id: number; qty: number}[], total:number) => {
+    const { data } = await api.post(`/order/preparePayment` , {storeId , tableNumber , items , total});
+    return data;
+  }
 };

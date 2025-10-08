@@ -11,16 +11,16 @@ export class OrderRepository {
     getMenusByIdsInStore(itemIds: number[], storeId: number) {
         if (!itemIds.length) return Promise.resolve([]);
         return this.prisma.menu_items.findMany({
-        where: { id: { in: itemIds }, store_id: storeId },
-        select: { id: true, name: true, price: true, is_available: true },
+            where: { id: { in: itemIds }, store_id: storeId },
+            select: { id: true, name: true, price: true, is_available: true },
         });
     }
 
     // 최신 pending 주문(동일 매장/테이블)
     findPendingOrderTx(tx: Prisma.TransactionClient, storeId: number, tableNumber: number) {
         return tx.orders.findFirst({
-        where: { store_id: storeId, table_number: tableNumber, status: 'pending' },
-        orderBy: { id: 'desc' },
+            where: { store_id: storeId, table_number: tableNumber, status: 'pending' },
+            orderBy: { id: 'desc' },
         });
     }
 
@@ -45,14 +45,14 @@ export class OrderRepository {
         orderId: number,
         rows: { menu_item_id: number; quantity: number; price_at_time: Prisma.Decimal }[],
     ) {
-        // 필요하면 createMany 대신 개별 create로 바꿔 오류 추적 가능
+        
         return tx.order_items.createMany({
-        data: rows.map(r => ({
-            order_id: orderId,
-            menu_item_id: r.menu_item_id,
-            quantity: r.quantity,
-            price_at_time: r.price_at_time,
-        })),
+            data: rows.map(r => ({
+                order_id: orderId,
+                menu_item_id: r.menu_item_id,
+                quantity: r.quantity,
+                price_at_time: r.price_at_time,
+            })),
         });
     }
 
@@ -63,8 +63,8 @@ export class OrderRepository {
         total: Prisma.Decimal,
     ) {
         return tx.orders.update({
-        where: { id: orderId },
-        data: { total_amount: total },
+            where: { id: orderId },
+            data: { total_amount: total },
         });
     }
 }

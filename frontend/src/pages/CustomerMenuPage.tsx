@@ -169,8 +169,6 @@ const CustomerMenuPage: React.FC = () => {
         return;
       }
 
-
-
       const customerKey = 'ANONYMOUS';
       const tosspayments = await loadTossPayments(clientKey);
       const widgets = tosspayments.widgets({
@@ -206,6 +204,7 @@ const CustomerMenuPage: React.FC = () => {
   
 
   const handleClosePayment = async () => {
+    
     if (paymentWidgetRef.current) {
       const { paymentMethodWidget, agreementWidget } = paymentWidgetRef.current;
       
@@ -243,8 +242,22 @@ const CustomerMenuPage: React.FC = () => {
     if (!paymentWidgetRef.current) return;
     
     try {
+      setPaymentLoading(true);
+
       const { widgets } = paymentWidgetRef.current;
       
+      const verify = await menuApi.prepareCheckout(storeId, tableNumber, cartLines.map(l => ({ id: l.id, qty: l.qty })) , cartTotal);
+      if(!verify.ok){
+        alert(verify.reason || '주문 금액이 변경되었거나 품절 상품이 있습니다. 다시 확인해주세요.');
+        await handleClosePayment();
+        await fetchInitial();  // 목록/가격 새로고침
+        return;
+      }
+      console.log(verify);
+
+      await widgets.setAmount({currency: 'KRW', value: verify.amount});
+
+
       await widgets.requestPayment({
         orderId: uuidv4(),
         orderName: `${cartLines[0]?.name} 외 ${cartLines.length - 1}건`,
