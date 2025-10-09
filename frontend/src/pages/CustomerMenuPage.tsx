@@ -270,6 +270,7 @@ const CustomerMenuPage: React.FC = () => {
     } catch (error) {
       console.error('결제 요청 실패:', error);
       setError('결제 요청에 실패했습니다.');
+      setPaymentLoading(false);
     }
   }
 
