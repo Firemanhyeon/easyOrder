@@ -52,6 +52,61 @@ const CustomerMenuPage: React.FC = () => {
   const paymentWidgetRef = useRef<any>(null);
 
   const clientKey = process.env.REACT_APP_TOSS_CLIENT_KEY!;
+
+  React.useEffect(() => {
+    const pay = sp.get('pay'); // 'success' | 'fail' | null
+    const paymentKey = sp.get('paymentKey') ?? '';
+    const orderId = sp.get('orderId') ?? '';
+    const amountStr = sp.get('amount') ?? '';
+    console.log(pay , paymentKey , orderId , amountStr);
+
+    // 실패 알림만
+    if (pay === 'fail') {
+      alert('결제가 취소되었거나 실패했습니다.');
+      // 쿼리 정리
+      navigate(`/store/menu/${storeId}?table=${tableNumber}`, { replace: true });
+      return;
+    }
+
+    // 성공 처리
+    if (pay === 'success') {
+      (async () => {
+        try {
+          const stored = sessionStorage.getItem(`PAY_${orderId}`);
+          if (!stored) {
+            alert('결제 정보가 만료되었거나 유실되었습니다. 다시 시도해주세요.');
+            navigate(`/store/menu/${storeId}?table=${tableNumber}`, { replace: true });
+            return;
+          }
+          const payload = JSON.parse(stored); // { storeId, tableNumber, items, orderCode }
+
+          // 서버에 최종 확정 요청 (주문 생성 포함)
+          
+          await menuApi.confirmOrder({
+            storeId: payload.storeId,
+            tableNumber: Number(payload.tableNumber),
+            items: payload.items,                 // [{ id, qty }]
+            orderCode: orderId,               // successUrl의 orderId == 우리가 만든 orderCode
+            paymentKey,                       // successUrl 쿼리
+            paidAmount: Number(amountStr),    // successUrl 쿼리
+          });
+          // 성공 UX
+          alert('결제가 완료되었습니다. 주문이 접수되었습니다.');
+          sessionStorage.removeItem(`PAY_${orderId}`);
+          setCart({});        // 장바구니 비우기
+          setCartOpen(false); // 드로어 닫기
+        } catch (e:any) {
+          console.error(e);
+          alert(e?.response?.data?.message || '결제 승인/주문 저장에 실패했습니다.');
+        } finally {
+          // 쿼리 깔끔히 제거
+          navigate(`/store/menu/${storeId}?table=${tableNumber}`, { replace: true });
+        }
+      })();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sp, storeId, tableNumber]);
+
   // 페이지 진입 로딩
   const fetchInitial = async () => {
     try {
@@ -244,7 +299,6 @@ const CustomerMenuPage: React.FC = () => {
     try {
       setPaymentLoading(true);
 
-      const { widgets } = paymentWidgetRef.current;
       
       const verify = await menuApi.prepareCheckout(storeId, tableNumber, cartLines.map(l => ({ id: l.id, qty: l.qty })) , cartTotal);
       if(!verify.ok){
@@ -253,47 +307,33 @@ const CustomerMenuPage: React.FC = () => {
         await fetchInitial();  // 목록/가격 새로고침
         return;
       }
-      console.log(verify);
-
+      const { widgets } = paymentWidgetRef.current;
       await widgets.setAmount({currency: 'KRW', value: verify.amount});
 
+      //로컬에 장바구니 저장
+      const payloadForConfirm = {
+        storeId,
+        tableNumber,
+        items: cartLines.map(l => ({id: l.id , qty: l.qty})),
+        orderCode: verify.orderId,
+        paidAmount: verify.amount
+      };
+      sessionStorage.setItem(`PAY_${verify.orderId}` , JSON.stringify(payloadForConfirm));
 
       await widgets.requestPayment({
-        orderId: uuidv4(),
+        orderId: verify.orderId,
         orderName: `${cartLines[0]?.name} 외 ${cartLines.length - 1}건`,
-        successUrl: window.location.origin + "/success",
-        failUrl: window.location.origin + "/fail",
-        customerEmail: "customer123@gmail.com",
-        customerName: "김토스",
+        successUrl: `${window.location.origin}/store/menu/${storeId}?table=${tableNumber}&pay=success`,
+        failUrl: `${window.location.origin}/store/menu/${storeId}?table=${tableNumber}&pay=fail`,
       });
       
+
     } catch (error) {
       console.error('결제 요청 실패:', error);
       setError('결제 요청에 실패했습니다.');
       setPaymentLoading(false);
     }
   }
-
-  //주문
-  const handleOrder = async () => {
-    
-    const tableOrder = {
-      storeId,
-      tableNumber,
-      items: cartLines.map(l => ({ id: l.id, qty: l.qty })),
-      total: cartTotal,
-    };
-    console.log('주문 데이터:', tableOrder);
-    const result = await menuApi.createOrder(storeId, tableNumber, cartLines.map(l => ({ id: l.id, qty: l.qty })) , cartTotal);
-
-    if(result) {
-      alert('주문이 완료되었습니다.');
-      setCart({});
-      setCartOpen(false);
-    } else {
-      alert('주문에 실패했습니다. 다시 시도해주세요.');
-    }
-  };
 
   const safeBottom = 'max(env(safe-area-inset-bottom), 12px)';
 
@@ -519,7 +559,7 @@ const CustomerMenuPage: React.FC = () => {
               <Button
                 fullWidth
                 variant="outlined"
-                onClick={() => setPaymentOpen(false)}
+                onClick={() => handleCheckout}
               >
                 취소
               </Button>

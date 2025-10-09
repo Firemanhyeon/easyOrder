@@ -66,8 +66,15 @@ export const menuApi = {
   },
 
   // 주문 생성
-  createOrder: async (storeId: number, tableNumber: string, items: { id: number; qty: number }[], total: number) => {
-    const { data } = await api.post(`/order`, { storeId, tableNumber, items, total });
+  confirmOrder: async (payload:{
+    storeId: number;
+    tableNumber: number;
+    items: { id: number; qty: number }[];
+    paidAmount: number;
+    orderCode: string;
+    paymentKey:string;
+  }) => {
+    const { data } = await api.post(`/order`, payload);
     return data;
   },
 

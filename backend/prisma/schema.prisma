@@ -87,7 +87,9 @@ model orders {
   store_id     Int
   table_number Int
   total_amount Decimal       @db.Decimal(10, 2)
-  status       order_status  @default(pending)
+  status       order_status  @default(confirmed)
+  order_code   String        @unique @db.VarChar(100)   // 프론트/토스에 쓴 orderId
+  payment_key  String?       @db.VarChar(200)           // 토스 paymentKey
   created_at   DateTime      @default(now())
   updated_at   DateTime      @default(now()) @updatedAt
   order_items  order_items[]

@@ -2,97 +2,90 @@ import { OrderRepository } from "../repositories/OrderRepository";
 import { PrismaClient , Prisma } from "@prisma/client";
 import { randomUUID } from "crypto";
 
+type OrderItemInput = { id: number; qty: number };
+
 export class OrderService {
     private orderRepository: OrderRepository;
     private prisma: PrismaClient;
 
+
     constructor() {
         this.prisma = new PrismaClient();
         this.orderRepository = new OrderRepository(this.prisma);
-    }
+    } 
+
+    private buildLinesAndTotal(
+      menus: Array<{ id: number; price: Prisma.Decimal }>,
+      items: OrderItemInput[]
+    ): { serverTotal: Prisma.Decimal; lines: { menu_item_id: number; quantity: number; price_at_time: Prisma.Decimal }[] } {
+      let serverTotal = new Prisma.Decimal(0);
+      const lines = items.map((it: OrderItemInput) => {
+      const { id, qty } = it;
+      const menu = menus.find(m => m.id === id)!;
+      const unit = new Prisma.Decimal(menu.price);
+      serverTotal = serverTotal.add(unit.mul(qty));
+      return { menu_item_id: id, quantity: qty, price_at_time: unit };
+    });
+    return { serverTotal, lines };
+  }
 
     // 주문 생성
-    async createOrder(data: {
-        storeId: number;
-        tableNumber: number;
-        items: { id: number; qty: number }[];
-        total: number;
+    async confirmAndCreateOrder(data: {
+      storeId: number;
+      tableNumber: number;
+      items: OrderItemInput[];
+      paidAmount: number;   // Toss 승인 응답의 실제 결제 금액
+      orderCode: string;    // preparePayment에서 만든 값
+      paymentKey: string;   // Toss 승인 응답
     }) {
-        // 1) 메뉴 유효성/가격 조회 (해당 매장 소속 + 판매중)
-        const { storeId , tableNumber , items } = data;
-        const menuIds = items.map(i => i.id);
-        const menus = await this.orderRepository.getMenusByIdsInStore(menuIds, storeId);
+      const { storeId, tableNumber, items, paidAmount, orderCode, paymentKey} = data;
 
-        if (menus.length !== menuIds.length) {
-        throw new Error('존재하지 않거나 이 매장 소속이 아닌 메뉴가 포함되어 있습니다.');
-        }
+      const menuIds = items.map((i) => i.id);
+      const menus = await this.orderRepository.getMenusByIdsInStore(menuIds, storeId);
+      if (menus.length !== menuIds.length) {
+        throw new Error("존재하지 않거나 매장 소속이 아닌 메뉴가 포함되어 있습니다.");
+      }
+      const notAvail = menus.find((m) => !m.is_available);
+      if (notAvail) throw new Error(`품절/비판매 메뉴 포함: ${notAvail.name}`);
 
-        // 판매중 체크
-        const notAvail = menus.find(m => !m.is_available);
-        if (notAvail) throw new Error(`품절/비판매 메뉴 포함: ${notAvail.name}`);
+      const { serverTotal, lines } = this.buildLinesAndTotal(
+        menus.map((m) => ({ id: m.id, price: m.price as Prisma.Decimal })),
+        items
+      );
 
-        
-        // 2) 합계 계산 (현재 시점 가격 기준)
-        let addTotal = new Prisma.Decimal(0);
-        const lines = items.map(({ id, qty }) => {
-        const menu = menus.find(m => m.id === id)!;
-        const unit = new Prisma.Decimal(menu.price); // unit price
-        addTotal = addTotal.add(unit.mul(qty));
-        return { menu_item_id: id, quantity: qty, price_at_time: unit };
-        });
+      if (!serverTotal.eq(new Prisma.Decimal(paidAmount))) {
+        throw new Error("결제 금액 불일치");
+      }
 
-        // 3) 트랜잭션: 기존 pending 주문 있으면 추가, 없으면 새로 생성
-        const result = await this.prisma.$transaction(async (tx) => {
-            // 동일 테이블의 최신 pending 주문
-            const existing = await this.orderRepository.findPendingOrderTx(tx, storeId, tableNumber);
+      const saved = await this.prisma.$transaction(async (tx) => {
+        return this.orderRepository.createPaidOrderWithItemsTx(
+          tx,
+          {
+            storeId,
+            tableNumber,
+            totalAmount: serverTotal,
+            orderCode,
+            paymentKey,
+        },
+        lines
+      );
+    });
 
-            if (!existing) {
-                // 새 주문
-                const order = await this.orderRepository.createOrderTx(tx, {
-                storeId,
-                tableNumber,
-                totalAmount: addTotal,
-                });
-                await this.orderRepository.addOrderItemsTx(tx, order.id, lines);
+    return {
+      orderId: saved.id,
+      totalAmount: saved.total_amount.toString(),
+      status: saved.status,
+    };
+  }
 
-                // 반환
-                return {
-                createdNewOrder: true,
-                orderId: order.id,
-                addedItemsCount: lines.length,
-                addTotal: addTotal.toString(),
-                totalAmount: order.total_amount.toString(),
-                status: order.status,
-                };
-            } else {
-                // 기존 주문에 추가
-                await this.orderRepository.addOrderItemsTx(tx, existing.id, lines);
-
-                const newTotal = new Prisma.Decimal(existing.total_amount).add(addTotal);
-                const updated = await this.orderRepository.updateOrderTotalTx(tx, existing.id, newTotal);
-
-                return {
-                createdNewOrder: false,
-                orderId: existing.id,
-                addedItemsCount: lines.length,
-                addTotal: addTotal.toString(),
-                totalAmount: updated.total_amount.toString(),
-                status: updated.status,
-                };
-            }
-        });
-        return result;
-    }
-
-    async preparePayment(data:{
-        storeId: number;
-        tableNumber: number;
-        items: { id: number; qty: number }[];
-        total: number;
-    }) : Promise<{ ok: boolean; amount: number; orderId: string; reason?: string }> {
+    async preparePayment(data: {
+    storeId: number;
+    tableNumber: number;
+    items: OrderItemInput[];
+    total: number;
+  }): Promise<{ ok: boolean; amount: number; orderId: string; reason?: string }> {
     const { storeId, tableNumber, items, total } = data;
 
-    // 0) 유효성
     if (!storeId || !tableNumber) {
       return { ok: false, amount: 0, orderId: "", reason: "요청 값이 올바르지 않습니다." };
     }
@@ -100,34 +93,25 @@ export class OrderService {
       return { ok: false, amount: 0, orderId: "", reason: "빈 주문입니다." };
     }
 
-    // 1) 메뉴 조회(해당 매장 소속 + 존재)
     const menuIds = items.map(i => i.id);
     const menus = await this.orderRepository.getMenusByIdsInStore(menuIds, storeId);
     if (menus.length !== menuIds.length) {
       return { ok: false, amount: 0, orderId: "", reason: "존재하지 않거나 매장 소속이 아닌 메뉴가 포함되어 있습니다." };
     }
-
-    // 2) 판매 가능 여부 확인
     const notAvail = menus.find(m => !m.is_available);
     if (notAvail) {
       return { ok: false, amount: 0, orderId: "", reason: `품절/비판매 메뉴 포함: ${notAvail.name}` };
     }
 
-    // 3) 서버 기준 총액 계산 (현재 시점 가격)
-    let serverTotal = new Prisma.Decimal(0);
-    for (const { id, qty } of items) {
-      const menu = menus.find(m => m.id === id)!;
-      const unit = new Prisma.Decimal(menu.price);
-      serverTotal = serverTotal.add(unit.mul(qty));
-    }
+    const { serverTotal } = this.buildLinesAndTotal(
+      menus.map(m => ({ id: m.id, price: m.price as Prisma.Decimal })),
+      items as OrderItemInput[]
+    );
 
-    // 4) 서버가 권위 있는 총액
-    const amountNumber = Number(serverTotal); // Decimal(10,2) -> number
-    const clientTotal = new Prisma.Decimal(total);
-    const ok = serverTotal.eq(clientTotal);
+    const amountNumber = Number(serverTotal);
+    const ok = serverTotal.eq(new Prisma.Decimal(total));
 
-    // 5) Toss에 보낼 orderId (승인 단계에서 동일 값 사용)
-    const orderId = `order_${storeId}_${tableNumber}_${Date.now()}_${randomUUID().slice(0,8)}`;
+    const orderId = `order_${storeId}_${tableNumber}_${Date.now()}_${randomUUID().slice(0, 8)}`;
 
     return ok
       ? { ok: true, amount: amountNumber, orderId }

@@ -9,7 +9,7 @@ const orderController = new OrderController(new OrderService());
 
 
 // 주문 생성
-router.post('/', orderController.createOrder);
+router.post('/', orderController.confirmOrder);
 
 //결제 전 검증
 router.post('/preparePayment' , orderController.preparePayment);
