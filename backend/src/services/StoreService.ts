@@ -3,6 +3,8 @@ import { PrismaClient } from '@prisma/client';
 import QRCode from 'qrcode';
 import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { QrCodeRepository } from '../repositories/QrCodeRepository';
+import prisma from '../config/database';
+
 type User = { id: number; role: 'admin' | 'store_owner' };
 
 export class StoreService {
@@ -10,8 +12,8 @@ export class StoreService {
   private prisma: PrismaClient;
   private qrCodeRepository: QrCodeRepository;
 
-  constructor() {
-    this.prisma = new PrismaClient();
+  constructor(prismaClient: PrismaClient = prisma) {
+    this.prisma = prismaClient;
     this.storeRepository = new StoreRepository(this.prisma);
     this.qrCodeRepository = new QrCodeRepository(this.prisma);
   }

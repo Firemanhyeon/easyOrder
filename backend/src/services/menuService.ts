@@ -1,7 +1,7 @@
 import { MenuRepository } from '../repositories/MenuRepository';
-import { PrismaClient } from '@prisma/client';  
+import { PrismaClient , Prisma } from '@prisma/client';  
 import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
-import { Prisma } from '@prisma/client';
+import prisma from '../config/database';
 
 type User = { id: number; role: 'admin' | 'store_owner' };
 
@@ -9,8 +9,8 @@ export class MenuService {
   private menuRepository: MenuRepository;
   private prisma: PrismaClient;
 
-  constructor() {
-    this.prisma = new PrismaClient();
+  constructor(prismaClient: PrismaClient = prisma) {
+    this.prisma = prismaClient;
     this.menuRepository = new MenuRepository(this.prisma);
   }
   private readonly s3 = new S3Client({ region: process.env.AWS_REGION });
@@ -25,8 +25,8 @@ export class MenuService {
   }
 
   // 카테고리별 메뉴 조회
-  async getMenuByCategory( categoryId: number, storeId: number) {
-    return this.menuRepository.getMenuByCategory( categoryId,storeId);
+  async getMenuByCategory(categoryId: number, storeId: number) {
+    return this.menuRepository.getMenuByCategory(categoryId,storeId);
   } 
 
   // 메뉴 추가

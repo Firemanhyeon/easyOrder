@@ -3,6 +3,7 @@ import { AdminRepository } from '../repositories/AdminRepository';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { AuthRepository } from '../repositories/AuthRepository';
+import prisma from '../config/database';
 
 const VALID_ROLES = ['admin', 'store_owner'] as const;
 
@@ -13,8 +14,8 @@ export class AuthService {
   private prisma: PrismaClient;
   private authRepository: AuthRepository;
 
-  constructor() {
-    this.prisma = new PrismaClient();
+  constructor(prismaClient: PrismaClient = prisma) {
+    this.prisma = prismaClient;
     this.adminRepository = new AdminRepository(this.prisma);
     this.authRepository = new AuthRepository(this.prisma);
   }

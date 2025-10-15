@@ -1,6 +1,7 @@
-import { OrderRepository } from "../repositories/OrderRepository";
-import { PrismaClient , Prisma } from "@prisma/client";
-import { randomUUID } from "crypto";
+import { OrderRepository } from '../repositories/OrderRepository';
+import { PrismaClient, Prisma } from '@prisma/client';
+import { randomUUID } from 'crypto';
+import prisma from '../config/database';
 
 type OrderItemInput = { id: number; qty: number };
 
@@ -9,9 +10,9 @@ export class OrderService {
     private prisma: PrismaClient;
 
 
-    constructor() {
-        this.prisma = new PrismaClient();
-        this.orderRepository = new OrderRepository(this.prisma);
+    constructor(prismaClient: PrismaClient = prisma) {
+      this.prisma = prismaClient;
+      this.orderRepository = new OrderRepository(this.prisma);
     } 
 
     private buildLinesAndTotal(
@@ -21,7 +22,7 @@ export class OrderService {
       let serverTotal = new Prisma.Decimal(0);
       const lines = items.map((it: OrderItemInput) => {
       const { id, qty } = it;
-      const menu = menus.find(m => m.id === id)!;
+      const menu = menus.find((m) => m.id === id)!;
       const unit = new Prisma.Decimal(menu.price);
       serverTotal = serverTotal.add(unit.mul(qty));
       return { menu_item_id: id, quantity: qty, price_at_time: unit };

@@ -1,13 +1,14 @@
 import { PrismaClient } from '@prisma/client';
 import { AdminRepository } from '../repositories/AdminRepository';
 import bcrypt from 'bcrypt';
+import prisma from '../config/database';
 
 export class AdminService {
   private adminRepository: AdminRepository;
   private prisma: PrismaClient;
 
-  constructor() {
-    this.prisma = new PrismaClient();
+  constructor(prismaClient: PrismaClient = prisma) {
+    this.prisma = prismaClient;
     this.adminRepository = new AdminRepository(this.prisma);
   }
 

@@ -1,15 +1,13 @@
 import { Request, Response, NextFunction } from "express";
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import prisma from '../config/database';
 
 export const ownStoreGuard = async (req: Request, res: Response, next: NextFunction) => {
   try {
     // 1) 관리자면 통과
-    if (req.user?.role === "admin") return next();
+    if (req.user?.role === 'admin') return next();
 
     const ownerId = req.user?.id;
-    if (!ownerId) return res.status(401).json({ message: "인증이 필요합니다." });
+    if (!ownerId) return res.status(401).json({ message: '인증이 필요합니다.' });
 
     let storeId: number | undefined;
 
@@ -23,7 +21,7 @@ export const ownStoreGuard = async (req: Request, res: Response, next: NextFunct
     if (!storeId && req.params.id !== undefined) {
       const n = Number(req.params.id);
       if (!Number.isNaN(n)) {
-        if (req.baseUrl?.includes("/stores")) {
+        if (req.baseUrl?.includes('/stores')) {
           // /api/stores/:id → storeId로 사용
           storeId = n;
         }
@@ -41,7 +39,7 @@ export const ownStoreGuard = async (req: Request, res: Response, next: NextFunct
     }
 
     // 4) 메뉴 라우트에서 /menu/:id 같은 경우 → 메뉴아이템으로 역조회
-    if (!storeId && req.baseUrl?.includes("/menu") && req.params.id !== undefined) {
+    if (!storeId && req.baseUrl?.includes('/menu') && req.params.id !== undefined) {
       const menu = await prisma.menu_items.findUnique({
         where: { id: Number(req.params.id) },
         select: { store_id: true },
@@ -50,7 +48,7 @@ export const ownStoreGuard = async (req: Request, res: Response, next: NextFunct
     }
 
     if (!storeId) {
-      return res.status(400).json({ message: "store_id가 필요합니다." });
+      return res.status(400).json({ message: 'store_id가 필요합니다.' });
     }
 
     // 5) 실제 소유자 검증
@@ -58,10 +56,10 @@ export const ownStoreGuard = async (req: Request, res: Response, next: NextFunct
       where: { id: storeId },
       select: { admin_id: true },
     });
-    if (!store) return res.status(404).json({ message: "매장을 찾을 수 없습니다." });
+    if (!store) return res.status(404).json({ message: '매장을 찾을 수 없습니다.' });
 
     if (store.admin_id !== ownerId) {
-      return res.status(403).json({ message: "권한이 없습니다. (매장 소유자 아님)" });
+      return res.status(403).json({ message: '권한이 없습니다. (매장 소유자 아님)' });
     }
 
     next();
