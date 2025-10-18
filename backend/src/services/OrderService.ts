@@ -1,5 +1,6 @@
 import { OrderRepository } from '../repositories/OrderRepository';
 import { PrismaClient, Prisma } from '@prisma/client';
+import { Decimal } from '@prisma/client/runtime/library';
 import { randomUUID } from 'crypto';
 import prisma from '../config/database';
 
@@ -16,19 +17,23 @@ export class OrderService {
     } 
 
     private buildLinesAndTotal(
-      menus: Array<{ id: number; price: Prisma.Decimal }>,
+      menus: Array<{ id: number; price: Decimal }>,
       items: OrderItemInput[]
-    ): { serverTotal: Prisma.Decimal; lines: { menu_item_id: number; quantity: number; price_at_time: Prisma.Decimal }[] } {
-      let serverTotal = new Prisma.Decimal(0);
+    ): {
+      serverTotal: Decimal;
+      lines: { menu_item_id: number; quantity: number; price_at_time: Decimal }[];
+    } {
+      let serverTotal = new Decimal(0);
       const lines = items.map((it: OrderItemInput) => {
-      const { id, qty } = it;
-      const menu = menus.find((m) => m.id === id)!;
-      const unit = new Prisma.Decimal(menu.price);
-      serverTotal = serverTotal.add(unit.mul(qty));
-      return { menu_item_id: id, quantity: qty, price_at_time: unit };
-    });
-    return { serverTotal, lines };
-  }
+        const { id, qty } = it;
+        const menu = menus.find((m) => m.id === id)!;
+        const unit = new Decimal(menu.price);
+        serverTotal = serverTotal.add(unit.mul(qty));
+        return { menu_item_id: id, quantity: qty, price_at_time: unit };
+      });
+
+      return { serverTotal, lines };
+    }
 
     // 주문 생성
     async confirmAndCreateOrder(data: {
@@ -50,15 +55,15 @@ export class OrderService {
       if (notAvail) throw new Error(`품절/비판매 메뉴 포함: ${notAvail.name}`);
 
       const { serverTotal, lines } = this.buildLinesAndTotal(
-        menus.map((m) => ({ id: m.id, price: m.price as Prisma.Decimal })),
+        menus.map((m) => ({ id: m.id, price: new Decimal(m.price) })),
         items
       );
 
-      if (!serverTotal.eq(new Prisma.Decimal(paidAmount))) {
+      if (!serverTotal.eq(new Decimal(paidAmount))) {
         throw new Error("결제 금액 불일치");
       }
 
-      const saved = await this.prisma.$transaction(async (tx) => {
+      const saved = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
         return this.orderRepository.createPaidOrderWithItemsTx(
           tx,
           {
@@ -67,10 +72,10 @@ export class OrderService {
             totalAmount: serverTotal,
             orderCode,
             paymentKey,
-        },
-        lines
-      );
-    });
+          },
+          lines
+        );
+      });
 
     return {
       orderId: saved.id,
@@ -94,23 +99,23 @@ export class OrderService {
       return { ok: false, amount: 0, orderId: "", reason: "빈 주문입니다." };
     }
 
-    const menuIds = items.map(i => i.id);
+    const menuIds = items.map((i) => i.id);
     const menus = await this.orderRepository.getMenusByIdsInStore(menuIds, storeId);
     if (menus.length !== menuIds.length) {
       return { ok: false, amount: 0, orderId: "", reason: "존재하지 않거나 매장 소속이 아닌 메뉴가 포함되어 있습니다." };
     }
-    const notAvail = menus.find(m => !m.is_available);
+    const notAvail = menus.find((m) => !m.is_available);
     if (notAvail) {
       return { ok: false, amount: 0, orderId: "", reason: `품절/비판매 메뉴 포함: ${notAvail.name}` };
     }
 
     const { serverTotal } = this.buildLinesAndTotal(
-      menus.map(m => ({ id: m.id, price: m.price as Prisma.Decimal })),
+      menus.map((m) => ({ id: m.id, price: new Decimal(m.price) })),
       items as OrderItemInput[]
     );
 
     const amountNumber = Number(serverTotal);
-    const ok = serverTotal.eq(new Prisma.Decimal(total));
+    const ok = serverTotal.eq(new Decimal(total));
 
     const orderId = `order_${storeId}_${tableNumber}_${Date.now()}_${randomUUID().slice(0, 8)}`;
 

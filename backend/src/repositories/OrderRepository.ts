@@ -1,4 +1,5 @@
 import { PrismaClient , Prisma } from "@prisma/client";
+import { Decimal } from '@prisma/client/runtime/library';
 
 export class OrderRepository {
     private prisma: PrismaClient;
@@ -8,12 +9,15 @@ export class OrderRepository {
     }
 
     // 이 매장 소속 + 판매중 메뉴만 조회
-    async getMenusByIdsInStore(itemIds: number[], storeId: number) {
+    async getMenusByIdsInStore(
+        itemIds: number[],
+        storeId: number
+    ): Promise<Array<{ id: number; name: string; price: Decimal; is_available: boolean }>> {
         if (!itemIds.length) return Promise.resolve([]);
         return await this.prisma.menu_items.findMany({
             where: { id: { in: itemIds }, store_id: storeId },
             select: { id: true, name: true, price: true, is_available: true },
-        });
+        }) as Array<{ id: number; name: string; price: Decimal; is_available: boolean }>;
     }
 
     //주문생성
@@ -22,13 +26,13 @@ export class OrderRepository {
       params: {
         storeId: number;
         tableNumber: number;
-        totalAmount: Prisma.Decimal;
+        totalAmount: Decimal;
         orderCode: string;
         paymentKey: string;
         paymentMethod?: string;
         approvedAt?: Date;
     },
-      items: { menu_item_id: number; quantity: number; price_at_time: Prisma.Decimal }[]
+      items: { menu_item_id: number; quantity: number; price_at_time: Decimal }[]
     ) {
     const order = await tx.orders.create({
       data: {
