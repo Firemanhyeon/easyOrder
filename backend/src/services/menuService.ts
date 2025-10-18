@@ -1,5 +1,6 @@
 import { MenuRepository } from '../repositories/MenuRepository';
-import { PrismaClient , Prisma } from '@prisma/client';  
+import { PrismaClient , Prisma } from '@prisma/client';
+import { Decimal } from '@prisma/client/runtime/library';
 import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import prisma from '../config/database';
 
@@ -114,7 +115,7 @@ export class MenuService {
       const s = typeof v === 'string' ? v.trim() : String(v);
       if (s === '' || Number.isNaN(Number(s))) return undefined; // NaN 차단
       try {
-        return new Prisma.Decimal(s); // Prisma가 허용하는 안전한 형태
+        return new Decimal(s); // Prisma가 허용하는 안전한 형태
       } catch {
         return undefined;
       }
@@ -159,7 +160,7 @@ export class MenuService {
     if (categoryId === 'all') {
       // ===== 전체 정렬: menu_items.global_position 갱신 =====
       console.log('전체 정렬:');
-      await this.prisma.$transaction(async (tx) => {
+      await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
         await this.menuRepository.updateGlobalOrderTx(tx, normalized);
       });
       return { success: true };
@@ -170,7 +171,7 @@ export class MenuService {
       if (!cat) {
         throw new Error('해당 매장의 카테고리가 아니거나 존재하지 않습니다.');
       }
-      await this.prisma.$transaction(async (tx) => {
+      await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
         await this.menuRepository.upsertCategoryOrderTx(tx, categoryId, normalized);
       });
       return { success: true };

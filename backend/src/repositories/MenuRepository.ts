@@ -1,4 +1,19 @@
 import { PrismaClient, Prisma } from '@prisma/client';
+import { Decimal } from '@prisma/client/runtime/library';
+
+type MenuItemRecord = {
+  id: number;
+  store_id: number;
+  name: string;
+  description: string | null;
+  price: Decimal | number;
+  image_url: string | null;
+  is_available: boolean;
+  category_id: number | null;
+  global_order: number | null;
+};
+
+type MenuItemCategoryLink = { item: MenuItemRecord };
 
 export class MenuRepository {
   private prisma: PrismaClient;
@@ -43,7 +58,7 @@ export class MenuRepository {
       include: { item: true },
     });
 
-    return links.map((l) => l.item);
+    return (links as MenuItemCategoryLink[]).map((link) => link.item);
   }
 
   // 메뉴 ID로 메뉴 조회
@@ -67,7 +82,7 @@ export class MenuRepository {
   }) {
     const { storeId, name, description, price, categoryId, imageUrl, isAvailable = true } = data;
 
-    return this.prisma.$transaction(async (tx) => {
+    return this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       // global_order = 현재 개수(또는 max+1)로 잡아 간단 정렬
       const countInStore = await tx.menu_items.count({ where: { store_id: storeId } });
       const nextGlobalOrder = countInStore; // 0부터 시작
@@ -109,7 +124,7 @@ export class MenuRepository {
   async updateMenuItem(id: number, data: {
     name?: string;
     description?: string;
-    price?: Prisma.Decimal | number;
+    price?: Decimal | number;
     image_url?: string;
     is_available?: boolean;
   }) {
