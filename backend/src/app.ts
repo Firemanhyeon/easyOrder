@@ -5,7 +5,9 @@ import authRoutes from './routes/auth';
 import adminRoutes from './routes/admin';
 import storeRoutes from './routes/storeRoutes';
 import orderRoutes from './routes/orderRoutes';
+import { PrismaClient } from '@prisma/client';
 
+const prisma = new PrismaClient();
 const app = express();
 
 // 미들웨어 설정
@@ -27,6 +29,5 @@ app.use('/api/order', orderRoutes);
 // 서버 시작
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
-  console.log('[DB URL]', process.env.DATABASE_URL);
+  console.log(`Server is running on port ${PORT}`); 1024  
 }); 
