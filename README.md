@@ -23,7 +23,7 @@
 
 | 구분 | 링크 |
 |------|------|
-| **배포 링크** | [🔗 YouTube Demo Link](http://43.201.111.140:3000/login) |
+| **배포 링크** | [🔗Link](http://43.201.111.140:3000/login) |
 | test Id : test@easyorder | test Pw : 1234
 
 
